@@ -1,18 +1,6 @@
-import customFilters from './custom-filters';
-
-const fieldTypes = {
-  created_at: 'date',
-  date_to: 'date',
-  tags: 'custom',
-  notTags: 'custom'
-};
-
-const fieldTypeDefault = 'string';
-const maxPageSize = 10000;
-const minPageSize = 10;
-
-// function 
 export default {
+  // maxPageSize = options.maxPageSize || 100;
+  // minPageSize = options.maxPageSize ||  10;
   formatFilterQueryParams(conditions) {
     const final = {};
     for (var key in conditions) {
@@ -20,10 +8,14 @@ export default {
     }
     return final;
   },
+
   run(request, modelName, schema, env) {
+    console.log(this.options)
     let jobs = schema[modelName].all();
     var size = parseInt(request.queryParams['page[size]']);
-    var filteredJobs = this.filteredItems(jobs, request.queryParams, schema);
+    var filteredJobs = schema[modelName].where(dbItem => {
+      return isFilterMatch(dbItem, searchParams);
+    });
     var sortedJobs = this.sortedItems(filteredJobs, request.queryParams.sort);
     var slicedJobs = this.slicedItems(sortedJobs, request.queryParams['page[number]'], request.queryParams['page[size]']);
     let json = env.serialize(slicedJobs);
@@ -33,13 +25,13 @@ export default {
     json.meta = {
       total_data_length: jobs.length,
       filtered_data_length: filteredJobs.length,
-      max_page_size: maxPageSize,
-      min_page_size: minPageSize,
+      max_page_size: this.options.maxPageSize,
+      min_page_size: this.options.minPageSize,
       page_size: size,
       page_size_decrement: page_size_decrement,
       page_size_increment: page_size_increment,
-      page_size_is_max: size === maxPageSize,
-      page_size_is_min: size === minPageSize,
+      page_size_is_max: size === this.options.maxPageSize,
+      page_size_is_min: size === this.options.minPageSize,
       total_pages: Math.ceil(filteredJobs.length/size),
     };
     return json;
@@ -115,14 +107,18 @@ export default {
         
       }
     }
-    conditions = customFilters.customFilters(conditions, params, dbItem, schema);
+    if (options.this.customFilters) {
+      conditions = this.options.customFilters(conditions, params, dbItem, schema);
+    }
 
     return conditions.every(function(condition) {
       return condition === true;
     });
   },
-
-  slicedItems(items, page, size = maxPageSize) {
+  testing() {
+    console.log('testing')
+  },
+  slicedItems(items, page, size = this.options.maxPageSize) {
     var maxPageNumber = Math.ceil(items.length/size);
     var pageNumber = parseInt(page || 1);
     if (pageNumber > maxPageNumber) {
@@ -132,14 +128,6 @@ export default {
     var firstResult = pageSize * (pageNumber - 1);
     var lastResult = pageSize * pageNumber;
     return items.slice(firstResult,lastResult);
-  },
-
-  filteredItems(jobs, request, schema) {
-    var searchParams = this.parseFilterQueryParams(request);
-    var filteredItems = jobs.filter(item => {
-      return this.isFilterMatch(item, searchParams, schema);
-    });
-    return filteredItems;
   },
 
   camelize(str) {
@@ -170,6 +158,7 @@ export default {
     }
     var direction = sortProp.charAt(0) === '-' ? 'desc' : 'asc';
     sortProp = sortProp.charAt(0) === '-' ? sortProp.replace('-', '') : sortProp;
+    sortProp = camelize(sortProp);
 
     var sortedItems;
     if (direction === 'asc') {
