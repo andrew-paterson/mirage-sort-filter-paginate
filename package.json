@@ -10,5 +10,8 @@
     "tag-and-release": "^1.0.16"
   },
   "author": "",
-  "license": "ISC"
+  "license": "ISC",
+  "dependencies": {
+    "lodash.camelcase": "^4.3.0"
+  }
 }
