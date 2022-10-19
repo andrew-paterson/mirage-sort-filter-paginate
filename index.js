@@ -1,15 +1,16 @@
 import camelize  from 'lodash.camelcase';
+import merge from 'lodash.merge';
 
 export default {
   getWithDefault(item, modelName) {
     const defaults = {
-      fieldTypes: {},
+      paramsToModelMappings: {},
       modelTypes: {},
-      fieldTypeDefault: 'string',
       maxPageSize: 100,
       minPageSize: 10
     };
-    return this.options[modelName][item] || this.options[item] || defaults[item];
+    const options = merge({}, defaults, this.options._defaults, this.options[modelName]);
+    return options[item]
   },
 
   sortedModels(request, modelName, schema) {
@@ -83,8 +84,8 @@ export default {
     for (var key in params) {
       let condition;
       const paramsItem = params[key];
-      const fieldType = (this.getWithDefault('fieldTypes', modelName)[paramsItem.requestParam] || {}).fieldType || this.getWithDefault('fieldTypeDefault', modelName);
-      const dbItemPropValue = dbItem[paramsItem.dbParam] || dbItem[this.camelize(paramsItem.dbParam)] || '';
+      const fieldType = paramsItem.modelType;
+      const dbItemPropValue = dbItem[paramsItem.dbParam] || '';
       if (fieldType === 'date') {
         condition = key.endsWith('_from') ? moment(dbItemPropValue).isSameOrAfter(paramsItem.value, 'day') : moment(dbItemPropValue).isSameOrBefore(paramsItem.value, 'day');
         conditions.push(condition);
@@ -175,13 +176,16 @@ export default {
   },
 
   parseFilterQueryParams(queryParams, modelName) {
-    const fieldTypes = this.getWithDefault('fieldTypes', modelName);
+    const paramsToModelMappings = this.getWithDefault('paramsToModelMappings', modelName);
+    const modelTypes = this.getWithDefault('modelTypes', modelName);
     const final = {};
     for (var key in queryParams) {
+      const modelProp = paramsToModelMappings[key] || key;
       if (queryParams[key]) {
         final[key] = {
           requestParam: key,
-          dbParam: (fieldTypes[key] || {}).model || key,
+          dbParam: this.camelize(modelProp),
+          modelType: modelTypes[modelProp] || modelTypes[camelize(modelProp)] || modelTypes._default,
           value: queryParams[key]
         }
       }
@@ -189,39 +193,47 @@ export default {
     return final
   },
 
-  sortedItems(items, sortProp, modelName) {
+  parseSortQueryParam(sortProp, modelName) {
+    sortProp = sortProp.charAt(0) === '-' ? sortProp.replace('-', '') : sortProp;
     const modelTypes = this.getWithDefault('modelTypes', modelName);
+    if (sortProp) {
+      return {
+        dbProp: this.camelize(sortProp),
+        modelType: modelTypes[sortProp] || modelTypes[camelize(sortProp)] || modelTypes._default,
+        value: sortProp
+      }
+    }
+  },
+ 
+  sortedItems(items, sortProp, modelName) {
+    const sortParams = this.parseSortQueryParam(sortProp, modelName);
     if (!sortProp) {
       return items;
     }
     const direction = sortProp.charAt(0) === '-' ? 'desc' : 'asc';
-    sortProp = sortProp.charAt(0) === '-' ? sortProp.replace('-', '') : sortProp;
-    const sortPropType = modelTypes[sortProp];
-    const dbProp = camelize(sortProp)
-   
     let sortedItems;
     if (direction === 'asc') {
       sortedItems = items.sort(function(a, b){
-        if (sortPropType === 'date') {
-          return moment(a[dbProp]).toDate() - moment(b[dbProp]).toDate();
-        } else if (sortPropType === 'string') {
-          var textA = a[dbProp].toUpperCase();
-          var textB = b[dbProp].toUpperCase();
+        if (sortParams.modelType === 'date') {
+          return moment(a[sortParams.dbProp]).toDate() - moment(b[sortParams.dbProp]).toDate();
+        } else if (sortParams.modelType === 'string') {
+          var textA = a[sortParams.dbProp].toUpperCase();
+          var textB = b[sortParams.dbProp].toUpperCase();
           return (textA < textB) ? -1 : (textA > textB) ? 1 : 0;
         } else {
-          return a[dbProp] - b[dbProp];
+          return a[sortParams.dbProp] - b[sortParams.dbProp];
         }
       });
     } else {
       sortedItems = items.sort(function(a, b){
-        if (sortPropType === 'date') {
-          return moment(b[dbProp]).toDate() - moment(a[dbProp]).toDate();
-        } else if (sortPropType === 'string') {
-          var textA = a[dbProp].toUpperCase();
-          var textB = b[dbProp].toUpperCase();
+        if (sortParams.modelType === 'date') {
+          return moment(b[sortParams.dbProp]).toDate() - moment(a[sortParams.dbProp]).toDate();
+        } else if (sortParams.modelType === 'string') {
+          var textA = a[sortParams.dbProp].toUpperCase();
+          var textB = b[sortParams.dbProp].toUpperCase();
           return (textB < textA) ? -1 : (textB > textA) ? 1 : 0;
         }else {
-          return b[dbProp] - a[dbProp];
+          return b[sortParams.dbProp] - a[sortParams.dbProp];
         }
       });
       // TODO add number
