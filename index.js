@@ -85,6 +85,10 @@ export default {
       let condition;
       const paramsItem = params[key];
       const fieldType = paramsItem.modelType;
+      if (!paramsItem.dbParam in dbItem ) {
+        conditions.push(true);
+        continue;
+      }
       const dbItemPropValue = dbItem[paramsItem.dbParam] || '';
       if (fieldType === 'date') {
         condition = key.endsWith('_from') ? moment(dbItemPropValue).isSameOrAfter(paramsItem.value, 'day') : moment(dbItemPropValue).isSameOrBefore(paramsItem.value, 'day');
