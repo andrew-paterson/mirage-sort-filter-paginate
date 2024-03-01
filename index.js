@@ -6,7 +6,7 @@ export default {
   getWithDefault(item, modelName) {
     const defaults = {
       paramsToModelMappings: {},
-      filterFunctionsMap: {},
+      filterMethods: {},
       sortMethods: {},
       maxPageSize: 100,
       minPageSize: 10,
@@ -107,10 +107,17 @@ export default {
       let condition;
       const paramsItem = params[key];
       const fieldType = paramsItem.filterFunction;
+
+      if (typeof fieldType === 'function') {
+        condition = fieldType(dbItem, params, schema, modelName);
+        conditions.push(condition);
+        continue;
+      }
       if (!(paramsItem.dbParam in dbItem)) {
         conditions.push(true);
         continue;
       }
+      // console.log(fieldType);
       const dbItemPropValue = dbItem[paramsItem.dbParam] || '';
       if (fieldType === 'date_gt') {
         condition = moment(dbItemPropValue).isAfter(paramsItem.value, 'day');
@@ -136,7 +143,7 @@ export default {
       } else if (fieldType === 'lte') {
         condition = dbItemPropValue <= paramsItem.value;
         conditions.push(condition);
-      } else if (fieldType === 'array') {
+      } else if (fieldType === 'array_includes') {
         condition = paramsItem.value.indexOf(dbItemPropValue) > -1;
         conditions.push(condition);
       } else if (fieldType === 'string') {
@@ -223,7 +230,7 @@ export default {
   parseFilterQueryParams(queryParams, modelName) {
     const paramsToModelMappings = this.getWithDefault('paramsToModelMappings', modelName);
     const sortMethods = this.getWithDefault('sortMethods', modelName);
-    const filterFunctionsMap = this.getWithDefault('filterFunctionsMap', modelName);
+    const filterMethods = this.getWithDefault('filterMethods', modelName);
     const final = {};
     for (var key in queryParams) {
       const modelProp = paramsToModelMappings[key] || key;
@@ -233,7 +240,7 @@ export default {
           dbParam: this.camelize(modelProp),
           sortMethod: sortMethods[modelProp] || sortMethods[camelize(modelProp)] || sortMethods._default,
           value: queryParams[key],
-          filterFunction: filterFunctionsMap[key],
+          filterFunction: filterMethods[key],
         };
       }
     }

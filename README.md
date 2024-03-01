@@ -36,21 +36,21 @@ mirageFSP.options = {
       date_to: 'date',
       tags: 'tagIds',
     },
-    sortMethods: { // Tells FSP what kind of sorting algorithm to use for each sortable qp key. The default is string, so you only need to specificy the sortMethod for number, date and arrayLength.
+    sortMethods: { // Tells FSP what kind of sorting algorithm to use for each sortable query param. The default is string, so you only need to specificy the sortMethod for number, date and arrayLength.
       amount: 'number',
       date: 'date',
       tags: 'arrayLength'
     },
 
-    filterFunctionsMap: {
+    filterMethods: { // Tesll FSP what kind of filtering algorith to use for each filterable query param. Possible options are string, array_includes, date_gt, date_lt, date_gte, date_lte, gt, lt, gte, lte, and custom
       description: 'string',
       account_name: 'string',
-      direction: 'array',
+      direction: 'array_includes',
       date_from: 'date_gte',
       date_to: 'date_lte',
-      tags: 'custom',
       min_amount: 'gte',
       max_amount: 'lte',
+      tags: 'custom',
     },
     customFilters: customFilters,
     maxPageSize: 50,
