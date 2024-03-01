@@ -29,16 +29,17 @@ mirageFSP.options = {
     minPageSize: 5, // Default = 10. Sets the minimum allowed page size, and will override `page[size]` in the query params if the query param is smaller than minPageSize.
   }
   payments: {
-    paramsToModelMappings: { // Tells mirageFSP which model propery each query param key pertains to. This is only required where the query param key and model name differ. For example, min_amount is a query param key that requires filtering on the amount property of the payment model.
+    paramsToModelMappings: { // Tells mirageFSP which model propery each query param key pertains to. This is only required where the query param key and model name differ. For example, min_amount is a query param key that requires filtering on the amount property of the payment model. Not that for hasMany props such as tags, the db prop in the mirage DB is the version ending in "Ids"
       min_amount: 'amount',
       max_amount: 'amount',
       date_from: 'date',
       date_to: 'date',
+      tags: 'tagIds',
     },
-    modelTypes: { // Tells FSP what kind of data each model property is. This ios required so that it
+    sortMethods: { // Tells FSP what kind of sorting algorithm to use for each sortable qp key. The default is string, so you only need to specificy the sortMethod for number, date and arrayLength.
       amount: 'number',
       date: 'date',
-      tags: 'array'
+      tags: 'arrayLength'
     },
 
     filterFunctionsMap: {

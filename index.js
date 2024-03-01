@@ -7,7 +7,7 @@ export default {
     const defaults = {
       paramsToModelMappings: {},
       filterFunctionsMap: {},
-      modelTypes: {},
+      sortMethods: {},
       maxPageSize: 100,
       minPageSize: 10,
     };
@@ -222,7 +222,7 @@ export default {
 
   parseFilterQueryParams(queryParams, modelName) {
     const paramsToModelMappings = this.getWithDefault('paramsToModelMappings', modelName);
-    const modelTypes = this.getWithDefault('modelTypes', modelName);
+    const sortMethods = this.getWithDefault('sortMethods', modelName);
     const filterFunctionsMap = this.getWithDefault('filterFunctionsMap', modelName);
     const final = {};
     for (var key in queryParams) {
@@ -231,7 +231,7 @@ export default {
         final[key] = {
           requestParam: key,
           dbParam: this.camelize(modelProp),
-          modelType: modelTypes[modelProp] || modelTypes[camelize(modelProp)] || modelTypes._default,
+          sortMethod: sortMethods[modelProp] || sortMethods[camelize(modelProp)] || sortMethods._default,
           value: queryParams[key],
           filterFunction: filterFunctionsMap[key],
         };
@@ -242,11 +242,13 @@ export default {
 
   parseSortQueryParam(sortProp, modelName) {
     sortProp = sortProp.charAt(0) === '-' ? sortProp.replace('-', '') : sortProp;
-    const modelTypes = this.getWithDefault('modelTypes', modelName);
+    const sortMethods = this.getWithDefault('sortMethods', modelName);
+    const paramsToModelMappings = this.getWithDefault('paramsToModelMappings', modelName);
     if (sortProp) {
       return {
-        dbProp: this.camelize(sortProp),
-        modelType: modelTypes[sortProp] || modelTypes[camelize(sortProp)] || modelTypes._default,
+        sortProp: sortProp,
+        dbProp: paramsToModelMappings[sortProp] || camelize(sortProp),
+        sortMethod: sortMethods[sortProp] || sortMethods[camelize(sortProp)] || sortMethods._default,
         value: sortProp,
       };
     }
@@ -261,10 +263,12 @@ export default {
     let sortedItems;
     if (direction === 'asc') {
       sortedItems = items.sort(function (a, b) {
-        if (sortParams.modelType === 'date') {
+        if (sortParams.sortMethod === 'date') {
           return moment(a[sortParams.dbProp]).toDate() - moment(b[sortParams.dbProp]).toDate();
-        } else if (sortParams.modelType === 'number') {
+        } else if (sortParams.sortMethod === 'number') {
           return a[sortParams.dbProp] - b[sortParams.dbProp];
+        } else if (sortParams.sortMethod === 'arrayLength') {
+          return (a[sortParams.dbProp] || []).length - (b[sortParams.dbProp] || []).length;
         } else {
           var textA = a[sortParams.dbProp].toUpperCase();
           var textB = b[sortParams.dbProp].toUpperCase();
@@ -273,17 +277,18 @@ export default {
       });
     } else {
       sortedItems = items.sort(function (a, b) {
-        if (sortParams.modelType === 'date') {
+        if (sortParams.sortMethod === 'date') {
           return moment(b[sortParams.dbProp]).toDate() - moment(a[sortParams.dbProp]).toDate();
-        } else if (sortParams.modelType === 'number') {
+        } else if (sortParams.sortMethod === 'number') {
           return b[sortParams.dbProp] - a[sortParams.dbProp];
+        } else if (sortParams.sortMethod === 'arrayLength') {
+          return (b[sortParams.dbProp] || []).length - (a[sortParams.dbProp] || []).length;
         } else {
           var textA = a[sortParams.dbProp].toUpperCase();
           var textB = b[sortParams.dbProp].toUpperCase();
           return textB < textA ? -1 : textB > textA ? 1 : 0;
         }
       });
-      // TODO add number
     }
     return sortedItems;
   },
