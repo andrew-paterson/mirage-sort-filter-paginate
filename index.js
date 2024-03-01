@@ -1,37 +1,59 @@
-import camelize  from 'lodash.camelcase';
+import camelize from 'lodash.camelcase';
 import merge from 'lodash.merge';
+import moment from 'moment';
 
 export default {
   getWithDefault(item, modelName) {
     const defaults = {
       paramsToModelMappings: {},
+      filterFunctionsMap: {},
       modelTypes: {},
       maxPageSize: 100,
-      minPageSize: 10
+      minPageSize: 10,
     };
     const options = merge({}, defaults, this.options._defaults, this.options[modelName]);
-    return options[item]
+    return options[item];
   },
 
   sortedModels(request, modelName, schema) {
     let jobs = schema[modelName].all();
-    const filterParams = this.extractFiltersFromQueryParams(request.queryParams)
+    const filterParams = this.extractFiltersFromQueryParams(request.queryParams);
     var filteredModels = this.filteredItems(jobs, filterParams, schema, modelName);
     return this.sortedItems(filteredModels, request.queryParams.sort, modelName);
   },
 
   run(request, modelName, schema, env, opts = {}) {
     let jobs = schema[modelName].all();
-    var size = parseInt(request.queryParams['page[size]']);
-    const filterParams = this.extractFiltersFromQueryParams(request.queryParams)
+    const maxPageSize = this.getWithDefault('maxPageSize', modelName);
+    const minPageSize = this.getWithDefault('minPageSize', modelName);
+    const filterParams = this.extractFiltersFromQueryParams(request.queryParams);
     var searchParams = this.parseFilterQueryParams(filterParams, modelName);
-    var filteredModels = schema[modelName].where(dbItem => {
-      return this.isFilterMatch(dbItem, searchParams, modelName);
+    var filteredModels = schema[modelName].where((dbItem) => {
+      return this.isFilterMatch(dbItem, searchParams, schema, modelName);
     });
     var sortedModels = this.sortedItems(filteredModels, request.queryParams.sort, modelName);
-    var slicedModels = this.slicedItems(sortedModels, request.queryParams['page[number]'], request.queryParams['page[size]'], modelName);
+    const qpSize = parseInt(request.queryParams['page[size]'] || maxPageSize);
+    let size;
+    if (qpSize > maxPageSize) {
+      size = maxPageSize;
+    } else if (qpSize < minPageSize) {
+      size = minPageSize;
+    } else {
+      size = qpSize;
+    }
+    const totalPages = Math.ceil(filteredModels.length / size);
+    const qpNumber = parseInt(request.queryParams['page[number]'] || '1');
+    let number;
+    if (qpNumber > totalPages) {
+      number = totalPages;
+    } else if (qpNumber < 1) {
+      number = 1;
+    } else {
+      number = qpNumber;
+    }
+    var slicedModels = this.slicedItems(sortedModels, number, size, modelName);
     let json = env.serialize(slicedModels);
-    json.links = this.paginationLinks(request.queryParams['page[number]'], request.queryParams['page[size]'], request.queryParams.sort, filteredModels.length);
+    json.links = this.paginationLinks(number, size, request.queryParams.sort, filteredModels.length);
     var page_size_decrement = size - 10;
     var page_size_increment = size + 10;
     json.meta = {
@@ -44,18 +66,18 @@ export default {
       page_size_increment: page_size_increment,
       page_size_is_max: size === this.getWithDefault('maxPageSize', modelName),
       page_size_is_min: size === this.getWithDefault('minPageSize', modelName),
-      total_pages: Math.ceil(filteredModels.length/size),
+      total_pages: totalPages,
     };
     if (opts.customMetaTransforms) {
-      opts.customMetaTransforms(json.meta, filteredModels, sortedModels, slicedModels)
+      opts.customMetaTransforms(json.meta, filteredModels, sortedModels, slicedModels);
     }
     return json;
   },
 
   paginationLinks(page, size, sort, filteredItemsLength) {
-    size=parseInt(size);
-    page=parseInt(page || 1);
-    var maxPageNumber = Math.ceil(filteredItemsLength/size);
+    size = parseInt(size);
+    page = parseInt(page || 1);
+    var maxPageNumber = Math.ceil(filteredItemsLength / size);
     if (page > maxPageNumber) {
       page = maxPageNumber;
     }
@@ -63,7 +85,7 @@ export default {
     var secondPart = `&page[size]=${size}&sort=${sort}`;
     var paginationLinks = {};
     var firstQueryParams = encodeURI(`page[number]=1${secondPart}`);
-    var lastQueryParams = encodeURI(`page[number]=${Math.ceil(filteredItemsLength/size)}${secondPart}`);
+    var lastQueryParams = encodeURI(`page[number]=${Math.ceil(filteredItemsLength / size)}${secondPart}`);
     var selfQueryParams = encodeURI(`page[number]=${page}${secondPart}`);
     var prevQueryParams = encodeURI(`page[number]=${page - 1}${secondPart}`);
     var nextQueryParams = encodeURI(`page[number]=${page + 1}${secondPart}`);
@@ -79,19 +101,34 @@ export default {
     return paginationLinks;
   },
 
-  isFilterMatch(dbItem, params, modelName) {
+  isFilterMatch(dbItem, params, schema, modelName) {
     var conditions = [];
     for (var key in params) {
       let condition;
       const paramsItem = params[key];
-      const fieldType = paramsItem.modelType;
-      if (!paramsItem.dbParam in dbItem ) {
+      const fieldType = paramsItem.filterFunction;
+      if (!(paramsItem.dbParam in dbItem)) {
         conditions.push(true);
         continue;
       }
       const dbItemPropValue = dbItem[paramsItem.dbParam] || '';
-      if (fieldType === 'date') {
-        condition = key.endsWith('_from') ? moment(dbItemPropValue).isSameOrAfter(paramsItem.value, 'day') : moment(dbItemPropValue).isSameOrBefore(paramsItem.value, 'day');
+      if (fieldType === 'date_gt') {
+        condition = moment(dbItemPropValue).isAfter(paramsItem.value, 'day');
+        conditions.push(condition);
+      } else if (fieldType === 'date_lt') {
+        condition = moment(dbItemPropValue).isBefore(paramsItem.value, 'day');
+        conditions.push(condition);
+      } else if (fieldType === 'date_gte') {
+        condition = moment(dbItemPropValue).isSameOrAfter(paramsItem.value, 'day');
+        conditions.push(condition);
+      } else if (fieldType === 'date_lte') {
+        condition = moment(dbItemPropValue).isSameOrBefore(paramsItem.value, 'day');
+        conditions.push(condition);
+      } else if (fieldType === 'gt') {
+        condition = dbItemPropValue > paramsItem.value;
+        conditions.push(condition);
+      } else if (fieldType === 'lt') {
+        condition = dbItemPropValue < paramsItem.value;
         conditions.push(condition);
       } else if (fieldType === 'gte') {
         condition = dbItemPropValue >= paramsItem.value;
@@ -105,7 +142,7 @@ export default {
       } else if (fieldType === 'string') {
         if (paramsItem.value.indexOf('|') > -1 || paramsItem.value.match(/\r?\n/)) {
           const searchStrings = paramsItem.value.split(/\||\r?\n/);
-          searchStrings.forEach(searchString => {
+          searchStrings.forEach((searchString) => {
             let negate;
             if (searchString.startsWith('!')) {
               searchString = searchString.replace('!', '');
@@ -114,7 +151,7 @@ export default {
             if (dbItemPropValue.toLowerCase().indexOf(searchString.toLowerCase()) > -1) {
               condition = negate ? false : true;
             }
-          })
+          });
         } else {
           let searchString = paramsItem.value;
           let negate;
@@ -131,39 +168,43 @@ export default {
         conditions.push(condition);
       }
     }
-    if (this.getWithDefault('customFilters', modelName)) {
-      conditions = this.getWithDefault('customFilters', modelName)(conditions, params, dbItem, schema);
+    if (this.options[modelName] && this.options[modelName].customFilters) {
+      const customFiltersFunc = this.options[modelName].customFilters;
+      const customFilterConditions = customFiltersFunc(params, dbItem, schema);
+      conditions = conditions.concat(customFilterConditions);
     }
 
-    return conditions.every(function(condition) {
+    return conditions.every((condition) => {
       return condition === true;
     });
   },
 
   slicedItems(items, page, size, modelName) {
     size = size || this.getWithDefault('maxPageSize', modelName);
-    var maxPageNumber = Math.ceil(items.length/size);
-    var pageNumber = parseInt(page || 1);
+    var maxPageNumber = Math.ceil(items.length / size);
+    var pageNumber = page;
     if (pageNumber > maxPageNumber) {
       pageNumber = maxPageNumber;
     }
-    var pageSize = parseInt(size);
+    var pageSize = size;
     var firstResult = pageSize * (pageNumber - 1);
     var lastResult = pageSize * pageNumber;
-    return items.slice(firstResult,lastResult);
+    return items.slice(firstResult, lastResult);
   },
 
   filteredItems(jobs, params, schema, modelName) {
     var searchParams = this.parseFilterQueryParams(params, modelName);
-    var filteredItems = jobs.filter(item => {
+    var filteredItems = jobs.filter((item) => {
       return this.isFilterMatch(item, searchParams, schema, modelName);
     });
     return filteredItems;
   },
 
   camelize(str) {
-    if (!str) { return; }
-    return str.replace(/-|_+(.)?/g, function(match, chr) {
+    if (!str) {
+      return;
+    }
+    return str.replace(/-|_+(.)?/g, function (match, chr) {
       return chr ? chr.toUpperCase() : '';
     });
   },
@@ -173,15 +214,16 @@ export default {
     for (var key in queryParams) {
       const filterMatches = key.match(/filter\[(.*?)\]/);
       if (filterMatches && queryParams[key]) {
-        final[filterMatches[1]] = queryParams[key]
+        final[filterMatches[1]] = queryParams[key];
       }
     }
-    return final
+    return final;
   },
 
   parseFilterQueryParams(queryParams, modelName) {
     const paramsToModelMappings = this.getWithDefault('paramsToModelMappings', modelName);
     const modelTypes = this.getWithDefault('modelTypes', modelName);
+    const filterFunctionsMap = this.getWithDefault('filterFunctionsMap', modelName);
     const final = {};
     for (var key in queryParams) {
       const modelProp = paramsToModelMappings[key] || key;
@@ -190,11 +232,12 @@ export default {
           requestParam: key,
           dbParam: this.camelize(modelProp),
           modelType: modelTypes[modelProp] || modelTypes[camelize(modelProp)] || modelTypes._default,
-          value: queryParams[key]
-        }
+          value: queryParams[key],
+          filterFunction: filterFunctionsMap[key],
+        };
       }
     }
-    return final
+    return final;
   },
 
   parseSortQueryParam(sortProp, modelName) {
@@ -204,11 +247,11 @@ export default {
       return {
         dbProp: this.camelize(sortProp),
         modelType: modelTypes[sortProp] || modelTypes[camelize(sortProp)] || modelTypes._default,
-        value: sortProp
-      }
+        value: sortProp,
+      };
     }
   },
- 
+
   sortedItems(items, sortProp, modelName) {
     const sortParams = this.parseSortQueryParam(sortProp, modelName);
     if (!sortProp) {
@@ -217,31 +260,31 @@ export default {
     const direction = sortProp.charAt(0) === '-' ? 'desc' : 'asc';
     let sortedItems;
     if (direction === 'asc') {
-      sortedItems = items.sort(function(a, b){
+      sortedItems = items.sort(function (a, b) {
         if (sortParams.modelType === 'date') {
           return moment(a[sortParams.dbProp]).toDate() - moment(b[sortParams.dbProp]).toDate();
-        } else if (sortParams.modelType === 'string') {
+        } else if (sortParams.modelType === 'number') {
+          return a[sortParams.dbProp] - b[sortParams.dbProp];
+        } else {
           var textA = a[sortParams.dbProp].toUpperCase();
           var textB = b[sortParams.dbProp].toUpperCase();
-          return (textA < textB) ? -1 : (textA > textB) ? 1 : 0;
-        } else {
-          return a[sortParams.dbProp] - b[sortParams.dbProp];
+          return textA < textB ? -1 : textA > textB ? 1 : 0;
         }
       });
     } else {
-      sortedItems = items.sort(function(a, b){
+      sortedItems = items.sort(function (a, b) {
         if (sortParams.modelType === 'date') {
           return moment(b[sortParams.dbProp]).toDate() - moment(a[sortParams.dbProp]).toDate();
-        } else if (sortParams.modelType === 'string') {
+        } else if (sortParams.modelType === 'number') {
+          return b[sortParams.dbProp] - a[sortParams.dbProp];
+        } else {
           var textA = a[sortParams.dbProp].toUpperCase();
           var textB = b[sortParams.dbProp].toUpperCase();
-          return (textB < textA) ? -1 : (textB > textA) ? 1 : 0;
-        }else {
-          return b[sortParams.dbProp] - a[sortParams.dbProp];
+          return textB < textA ? -1 : textB > textA ? 1 : 0;
         }
       });
       // TODO add number
     }
     return sortedItems;
-  }
-}
+  },
+};
