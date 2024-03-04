@@ -106,47 +106,68 @@ export default {
     for (var key in params) {
       let condition;
       const paramsItem = params[key];
-      const fieldType = paramsItem.filterFunction;
+      const filterMethod = paramsItem.filterMethod;
 
-      if (typeof fieldType === 'function') {
-        condition = fieldType(dbItem, params, schema, modelName);
+      if (typeof filterMethod === 'function') {
+        condition = filterMethod(dbItem, params, schema, modelName);
         conditions.push(condition);
         continue;
       }
-      if (!(paramsItem.dbParam in dbItem)) {
-        conditions.push(true);
-        continue;
-      }
-      // console.log(fieldType);
+      // if (!(paramsItem.dbParam in dbItem)) {
+      //   conditions.push(true);
+      //   continue;
+      // }
       const dbItemPropValue = dbItem[paramsItem.dbParam] || '';
-      if (fieldType === 'date_gt') {
+      if (filterMethod === 'date_gt') {
         condition = moment(dbItemPropValue).isAfter(paramsItem.value, 'day');
         conditions.push(condition);
-      } else if (fieldType === 'date_lt') {
+      } else if (filterMethod === 'date_lt') {
         condition = moment(dbItemPropValue).isBefore(paramsItem.value, 'day');
         conditions.push(condition);
-      } else if (fieldType === 'date_gte') {
+      } else if (filterMethod === 'date_gte') {
         condition = moment(dbItemPropValue).isSameOrAfter(paramsItem.value, 'day');
         conditions.push(condition);
-      } else if (fieldType === 'date_lte') {
+      } else if (filterMethod === 'date_lte') {
         condition = moment(dbItemPropValue).isSameOrBefore(paramsItem.value, 'day');
         conditions.push(condition);
-      } else if (fieldType === 'gt') {
+      } else if (filterMethod === 'gt') {
         condition = dbItemPropValue > paramsItem.value;
         conditions.push(condition);
-      } else if (fieldType === 'lt') {
+      } else if (filterMethod === 'lt') {
         condition = dbItemPropValue < paramsItem.value;
         conditions.push(condition);
-      } else if (fieldType === 'gte') {
+      } else if (filterMethod === 'gte') {
         condition = dbItemPropValue >= paramsItem.value;
         conditions.push(condition);
-      } else if (fieldType === 'lte') {
+      } else if (filterMethod === 'lte') {
         condition = dbItemPropValue <= paramsItem.value;
         conditions.push(condition);
-      } else if (fieldType === 'array_includes') {
-        condition = paramsItem.value.indexOf(dbItemPropValue) > -1;
+      } else if (filterMethod === 'array_includes') {
+        condition = dbItemPropValue.indexOf(paramsItem.value) > -1;
         conditions.push(condition);
-      } else if (fieldType === 'string') {
+      } else if (filterMethod === 'array_length_lt') {
+        condition = (dbItemPropValue || []).length < paramsItem.value;
+        conditions.push(condition);
+      } else if (filterMethod === 'array_length_gt') {
+        console.log(dbItem.smartTagCloneIds);
+        condition = (dbItemPropValue || []).length > paramsItem.value;
+        conditions.push(condition);
+      } else if (filterMethod === 'array_length_lte') {
+        condition = (dbItemPropValue || []).length <= paramsItem.value;
+        conditions.push(condition);
+      } else if (filterMethod === 'array_length_gte') {
+        condition = (dbItemPropValue || []).length >= paramsItem.value;
+        conditions.push(condition);
+      } else if (filterMethod === 'array_intersection') {
+        condition = true;
+        const searchItems = (paramsItem.value || '').split(',');
+        searchItems.forEach((item) => {
+          if (!dbItemPropValue.includes(item)) {
+            condition = false;
+          }
+        });
+        conditions.push(condition);
+      } else if (filterMethod === 'string') {
         if (paramsItem.value.indexOf('|') > -1 || paramsItem.value.match(/\r?\n/)) {
           const searchStrings = paramsItem.value.split(/\||\r?\n/);
           searchStrings.forEach((searchString) => {
@@ -240,7 +261,7 @@ export default {
           dbParam: this.camelize(modelProp),
           sortMethod: sortMethods[modelProp] || sortMethods[camelize(modelProp)] || sortMethods._default,
           value: queryParams[key],
-          filterFunction: filterMethods[key],
+          filterMethod: filterMethods[key],
         };
       }
     }
@@ -267,6 +288,9 @@ export default {
       return items;
     }
     const direction = sortProp.charAt(0) === '-' ? 'desc' : 'asc';
+    if (typeof sortParams.sortMethod === 'function') {
+      return sortParams.sortMethod(sortProp, direction, items, modelName);
+    }
     let sortedItems;
     if (direction === 'asc') {
       sortedItems = items.sort(function (a, b) {
@@ -274,7 +298,7 @@ export default {
           return moment(a[sortParams.dbProp]).toDate() - moment(b[sortParams.dbProp]).toDate();
         } else if (sortParams.sortMethod === 'number') {
           return a[sortParams.dbProp] - b[sortParams.dbProp];
-        } else if (sortParams.sortMethod === 'arrayLength') {
+        } else if (sortParams.sortMethod === 'array_length') {
           return (a[sortParams.dbProp] || []).length - (b[sortParams.dbProp] || []).length;
         } else {
           var textA = a[sortParams.dbProp].toUpperCase();
@@ -288,7 +312,7 @@ export default {
           return moment(b[sortParams.dbProp]).toDate() - moment(a[sortParams.dbProp]).toDate();
         } else if (sortParams.sortMethod === 'number') {
           return b[sortParams.dbProp] - a[sortParams.dbProp];
-        } else if (sortParams.sortMethod === 'arrayLength') {
+        } else if (sortParams.sortMethod === 'array_length') {
           return (b[sortParams.dbProp] || []).length - (a[sortParams.dbProp] || []).length;
         } else {
           var textA = a[sortParams.dbProp].toUpperCase();

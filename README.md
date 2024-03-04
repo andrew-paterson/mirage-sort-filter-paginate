@@ -39,10 +39,13 @@ mirageFSP.options = {
     sortMethods: { // Tells FSP what kind of sorting algorithm to use for each sortable query param. The default is string, so you only need to specificy the sortMethod for number, date and arrayLength.
       amount: 'number',
       date: 'date',
-      tags: 'arrayLength'
-    },
+      tags: 'array_length'
+      description: (sortProp, sortDirection, items, modelName) => {
+        // Return "items" sorted in any way.
+      },
 
-    filterMethods: { // Tesll FSP what kind of filtering algorith to use for each filterable query param. Possible options are string, array_includes, date_gt, date_lt, date_gte, date_lte, gt, lt, gte, lte, and custom
+    },
+    filterMethods: { // Tells FSP what kind of filtering algorithm to use for each filterable query param. Possible options are string, array_includes, date_gt, date_lt, date_gte, date_lte, gt, lt, gte, lte, array_includes, array_length_lt, array_intersection, array_length_gt, array_length_lte, array_length_gte, or a custom function
       description: 'string',
       account_name: 'string',
       direction: 'array_includes',
@@ -50,7 +53,9 @@ mirageFSP.options = {
       date_to: 'date_lte',
       min_amount: 'gte',
       max_amount: 'lte',
-      tags: 'custom',
+      tags: (dbItem, params, schema, modelName) => {
+        // return false to exclude the item from the results .
+      },
     },
     customFilters: customFilters,
     maxPageSize: 50,
@@ -58,3 +63,5 @@ mirageFSP.options = {
   },
 };
 ```
+
+## Custom meta data transforms
