@@ -113,11 +113,7 @@ export default {
         conditions.push(condition);
         continue;
       }
-      // if (!(paramsItem.dbParam in dbItem)) {
-      //   conditions.push(true);
-      //   continue;
-      // }
-      const dbItemPropValue = dbItem[paramsItem.dbParam] || '';
+      const dbItemPropValue = dbItem[paramsItem.dbProp] || '';
       if (filterMethod === 'date_gt') {
         condition = moment(dbItemPropValue).isAfter(paramsItem.value, 'day');
         conditions.push(condition);
@@ -143,7 +139,13 @@ export default {
         condition = dbItemPropValue <= paramsItem.value;
         conditions.push(condition);
       } else if (filterMethod === 'array_includes') {
+        // The DB prop is an array and the query param value is a primitive
         condition = dbItemPropValue.indexOf(paramsItem.value) > -1;
+        conditions.push(condition);
+      } else if (filterMethod === 'in_array') {
+        // The DB prop is a primitive and the query param value is am array
+        const searchItems = Array.isArray(paramsItem.value) ? paramsItem.value : (paramsItem.value || '').split(',');
+        condition = searchItems.indexOf(dbItemPropValue) > -1;
         conditions.push(condition);
       } else if (filterMethod === 'array_length_lt') {
         condition = (dbItemPropValue || []).length < paramsItem.value;
@@ -160,9 +162,9 @@ export default {
         conditions.push(condition);
       } else if (filterMethod === 'array_intersection') {
         condition = true;
-        const searchItems = (paramsItem.value || '').split(',');
+        const searchItems = Array.isArray(paramsItem.value) ? paramsItem.value : (paramsItem.value || '').split(',');
         searchItems.forEach((item) => {
-          if (!dbItemPropValue.includes(item)) {
+          if (!searchItems.includes(item)) {
             condition = false;
           }
         });
@@ -228,14 +230,14 @@ export default {
     return filteredItems;
   },
 
-  camelize(str) {
-    if (!str) {
-      return;
-    }
-    return str.replace(/-|_+(.)?/g, function (match, chr) {
-      return chr ? chr.toUpperCase() : '';
-    });
-  },
+  // camelize(str) {
+  //   if (!str) {
+  //     return;
+  //   }
+  //   return str.replace(/-|_+(.)?/g, function (match, chr) {
+  //     return chr ? chr.toUpperCase() : '';
+  //   });
+  // },
 
   extractFiltersFromQueryParams(queryParams) {
     const final = {};
@@ -249,19 +251,20 @@ export default {
   },
 
   parseFilterQueryParams(queryParams, modelName) {
-    const paramsToModelMappings = this.getWithDefault('paramsToModelMappings', modelName);
-    const sortMethods = this.getWithDefault('sortMethods', modelName);
     const filterMethods = this.getWithDefault('filterMethods', modelName);
     const final = {};
     for (var key in queryParams) {
-      const modelProp = paramsToModelMappings[key] || key;
+      const filterMethodObj = filterMethods[key] || filterMethods._default;
+      if (!filterMethodObj) {
+        continue;
+      }
+      filterMethodObj.dbProp = filterMethodObj.dbProp || camelize(key);
       if (queryParams[key]) {
         final[key] = {
           requestParam: key,
-          dbParam: this.camelize(modelProp),
-          sortMethod: sortMethods[modelProp] || sortMethods[camelize(modelProp)] || sortMethods._default,
+          dbProp: filterMethodObj.dbProp,
           value: queryParams[key],
-          filterMethod: filterMethods[key],
+          filterMethod: filterMethodObj.method,
         };
       }
     }
@@ -271,22 +274,26 @@ export default {
   parseSortQueryParam(sortProp, modelName) {
     sortProp = sortProp.charAt(0) === '-' ? sortProp.replace('-', '') : sortProp;
     const sortMethods = this.getWithDefault('sortMethods', modelName);
-    const paramsToModelMappings = this.getWithDefault('paramsToModelMappings', modelName);
+    const sortMethodObj = sortMethods[sortProp] || sortMethods._default;
+    if (!sortMethodObj) {
+      return;
+    }
+    sortMethodObj.dbProp = sortMethodObj.dbProp || camelize(sortProp);
     if (sortProp) {
       return {
         sortProp: sortProp,
-        dbProp: paramsToModelMappings[sortProp] || camelize(sortProp),
-        sortMethod: sortMethods[sortProp] || sortMethods[camelize(sortProp)] || sortMethods._default,
+        dbProp: sortMethodObj.dbProp,
         value: sortProp,
+        sortMethod: sortMethodObj.method,
       };
     }
   },
 
   sortedItems(items, sortProp, modelName) {
-    const sortParams = this.parseSortQueryParam(sortProp, modelName);
     if (!sortProp) {
       return items;
     }
+    const sortParams = this.parseSortQueryParam(sortProp, modelName);
     const direction = sortProp.charAt(0) === '-' ? 'desc' : 'asc';
     if (typeof sortParams.sortMethod === 'function') {
       return sortParams.sortMethod(sortProp, direction, items, modelName);
