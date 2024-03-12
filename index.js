@@ -107,7 +107,6 @@ export default {
       let condition;
       const paramsItem = params[key];
       const filterMethod = paramsItem.filterMethod;
-
       if (typeof filterMethod === 'function') {
         condition = filterMethod(dbItem, params, schema, modelName);
         conditions.push(condition);
