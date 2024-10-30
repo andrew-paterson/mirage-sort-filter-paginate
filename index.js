@@ -15,23 +15,34 @@ export default {
     return options[item];
   },
 
-  sortedModels(request, modelName, schema) {
-    let jobs = schema[modelName].all();
+  allRecords(schema, modelName, preFilter) {
+    let records;
+    if (preFilter) {
+      records = schema[modelName].where(preFilter);
+    } else {
+      records = schema[modelName].all();
+    }
+    return records;
+  },
+
+  sortedModels(request, modelName, schema, opts = {}) {
+    let records = this.allRecords(schema, modelName, opts.preFilter);
     const filterParams = this.extractFiltersFromQueryParams(request.queryParams);
-    var filteredModels = this.filteredItems(jobs, filterParams, schema, modelName);
+    var filteredModels = this.filteredItems(records, filterParams, schema, modelName);
     return this.sortedItems(filteredModels, request.queryParams.sort, modelName);
   },
 
   run(request, modelName, schema, env, opts = {}) {
-    let jobs = schema[modelName].all();
+    let records = this.allRecords(schema, modelName, opts.preFilter);
     const maxPageSize = this.getWithDefault('maxPageSize', modelName);
     const minPageSize = this.getWithDefault('minPageSize', modelName);
     const filterParams = this.extractFiltersFromQueryParams(request.queryParams);
     var searchParams = this.parseFilterQueryParams(filterParams, modelName);
-    var filteredModels = schema[modelName].where((dbItem) => {
+    var filteredModels = records.filter((dbItem) => {
+      // Mirage specific filter function
       return this.isFilterMatch(dbItem, searchParams, schema, modelName);
     });
-    var sortedModels = this.sortedItems(filteredModels, request.queryParams.sort, modelName);
+    var sortedModels = this.sortedItems(filteredModels, request.queryParams.sort, modelName, opts);
     const qpSize = parseInt(request.queryParams['page[size]'] || maxPageSize);
     let size;
     if (qpSize > maxPageSize) {
@@ -57,7 +68,7 @@ export default {
     var page_size_decrement = size - 10;
     var page_size_increment = size + 10;
     json.meta = {
-      total_data_length: jobs.length,
+      total_data_length: records.length,
       filtered_data_length: filteredModels.length,
       max_page_size: this.getWithDefault('maxPageSize', modelName),
       min_page_size: this.getWithDefault('minPageSize', modelName),
@@ -142,7 +153,7 @@ export default {
         condition = dbItemPropValue.indexOf(paramsItem.value) > -1;
         conditions.push(condition);
       } else if (filterMethod === 'in_array') {
-        // The DB prop is a primitive and the query param value is am array
+        // The DB prop is a primitive and the query param value is an array
         const searchItems = Array.isArray(paramsItem.value) ? paramsItem.value : (paramsItem.value || '').split(',');
         condition = searchItems.indexOf(dbItemPropValue) > -1;
         conditions.push(condition);
@@ -150,7 +161,6 @@ export default {
         condition = (dbItemPropValue || []).length < paramsItem.value;
         conditions.push(condition);
       } else if (filterMethod === 'array_length_gt') {
-        console.log(dbItem.smartTagCloneIds);
         condition = (dbItemPropValue || []).length > paramsItem.value;
         conditions.push(condition);
       } else if (filterMethod === 'array_length_lte') {
@@ -221,9 +231,9 @@ export default {
     return items.slice(firstResult, lastResult);
   },
 
-  filteredItems(jobs, params, schema, modelName) {
+  filteredItems(records, params, schema, modelName) {
     var searchParams = this.parseFilterQueryParams(params, modelName);
-    var filteredItems = jobs.filter((item) => {
+    var filteredItems = records.filter((item) => {
       return this.isFilterMatch(item, searchParams, schema, modelName);
     });
     return filteredItems;
@@ -300,6 +310,7 @@ export default {
     let sortedItems;
     if (direction === 'asc') {
       sortedItems = items.sort(function (a, b) {
+        // Mirage specific sort function
         if (sortParams.sortMethod === 'date') {
           return moment(a[sortParams.dbProp]).toDate() - moment(b[sortParams.dbProp]).toDate();
         } else if (sortParams.sortMethod === 'number') {
@@ -314,6 +325,7 @@ export default {
       });
     } else {
       sortedItems = items.sort(function (a, b) {
+        // Mirage specific sort function
         if (sortParams.sortMethod === 'date') {
           return moment(b[sortParams.dbProp]).toDate() - moment(a[sortParams.dbProp]).toDate();
         } else if (sortParams.sortMethod === 'number') {

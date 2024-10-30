@@ -21,14 +21,26 @@ Your route handler will need to use a full function here, as opposed to an ES6 a
 In your route handler return
 
 ```javascript
-mirageFSP.run(request, mirageDbModelName, schema, this);
+mirageFSP.run(request, mirageDbModelName, schema, this, opts);
 ```
 
 That's it. The function will sort, filter and paginate your results based on your JSON API format query params for `sort`, `filter`, `page` and `size` and return a JSON API formatted response.
 
 ```javascript
 this.get('payments', function (schema, request) {
-  return mirageFSP.run(request, 'payments', schema, this);
+  return mirageFSP.run(request, 'payments', schema, this, opts);
+});
+```
+
+There is currently only 1 recognised in the `opts` argument, which is `preFilter`. This an object which will be passed to Mirage's `where` function to forcibly limit the records that will be filted, sorted and paginated. This is useful if you need to implement server side filters which the user does not control, for example ensuring that only records belonging to a user are returned.
+
+Note that `total_data_length` wil be the length of the results set returned from this preFilter.
+
+In the below example, if the Mirage DB has payments belonging to users with ids other than 1, those payments would be ignored.,
+
+```javascript
+this.get('payments', function (schema, request) {
+  return mirageFSP.run(request, 'payments', schema, this, { preFilter: { userId: 1 } });
 });
 ```
 
