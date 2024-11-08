@@ -70,10 +70,11 @@ mirageFSP.options = {
       amount: {method: 'number'},
       date: {method: 'date', dbProp: 'insertedAt'}
       tags: {method: 'array_length', dbProp: 'insertedAt'}
-      description: (sortProp, sortDirection, items, modelName) => {
+      description: {
+        method(sortProp, sortDirection, items, modelName) => {
         // Return "items" sorted in any way.
-      },
-
+        },
+      }
     },
     filterMethods: {
       _default: {method: 'string'},
@@ -83,9 +84,11 @@ mirageFSP.options = {
       date_to: {method: 'date_lte', dbProp: 'insertedAt'},
       min_amount: {method: 'gte', dbProp: 'amount'},
       max_amount: {method: 'lte', dbProp: 'amount'},
-      tags: (dbItem, params, schema, modelName) => {
+      tags: {
+        method(dbItem, params, schema, modelName) => {
         // return false to exclude the item from the results .
-      },
+        },
+      }
     },
     maxPageSize: 50,
     minPageSize: 5,
